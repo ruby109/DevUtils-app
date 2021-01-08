@@ -9,9 +9,9 @@
 import Cocoa
 
 class TextDiffViewController: ToolViewController, NSTextViewDelegate {
-  @IBOutlet var input1TextView: NSTextView!
-  @IBOutlet var input2TextView: NSTextView!
-  @IBOutlet var diffTextView: NSTextView!
+  @IBOutlet var input1TextView: CodeTextView!
+  @IBOutlet var input2TextView: CodeTextView!
+  @IBOutlet var diffTextView: CodeTextView!
   @IBOutlet weak var diffModeCharacterCheckbox: NSButton!
   @IBOutlet weak var diffModeWordCheckbox: NSButton!
   @IBOutlet weak var diffModeLineCheckbox: NSButton!
@@ -43,9 +43,6 @@ class TextDiffViewController: ToolViewController, NSTextViewDelegate {
   override func viewDidLoad() {
     super.viewDidLoad()
     
-    input1TextView.setupStandardTextview()
-    input2TextView.setupStandardTextview()
-    diffTextView.setupStandardTextview()
   }
   
   func getOutputMode() -> OutputMode {
@@ -143,6 +140,9 @@ class TextDiffViewController: ToolViewController, NSTextViewDelegate {
     if getOutputMode() == .formattedText {
       d.forEach({ (diff) in
         let item = diff as! Diff
+        
+        // TODO: this will not work well for strings with multi bytes characters
+        // like emojis.
         let length = item.text.lengthOfBytes(using: .utf8)
         
         if item.operation == DIFF_DELETE {
@@ -173,6 +173,7 @@ class TextDiffViewController: ToolViewController, NSTextViewDelegate {
     }
     
     diffTextView.textStorage?.setAttributedString(s)
+    diffTextView.refreshLineNumberView()
   }
   
   func updateNextPrevButtonState() {
@@ -207,13 +208,14 @@ class TextDiffViewController: ToolViewController, NSTextViewDelegate {
   func focusDiffRange() {
     // log.debug("currentDiffRangesIndex: \(currentDiffRangesIndex)")
     if let range = diffRanges[safe: currentDiffRangesIndex] {
+      diffTextView.scrollRangeToVisible(range)
       diffTextView.showFindIndicator(for: range)
     }
   }
   
   func addedAttrStr(content: String) -> NSMutableAttributedString {
     var attributes = [
-      NSAttributedString.Key.backgroundColor: NSColor.green as Any,
+      NSAttributedString.Key.backgroundColor: NSColor.systemGreen as Any,
       NSAttributedString.Key.foregroundColor: NSColor.black as Any,
       NSAttributedString.Key.underlineStyle: 1 as Any
     ]
@@ -225,7 +227,7 @@ class TextDiffViewController: ToolViewController, NSTextViewDelegate {
   
   func deletedAttrStr(content: String) -> NSMutableAttributedString {
     var attributes = [
-      NSAttributedString.Key.backgroundColor: NSColor.red as Any,
+      NSAttributedString.Key.backgroundColor: NSColor.systemRed as Any,
       NSAttributedString.Key.foregroundColor: NSColor.black as Any,
       NSAttributedString.Key.strikethroughStyle: 1 as Any
     ]

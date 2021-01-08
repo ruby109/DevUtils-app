@@ -9,14 +9,12 @@
 import Cocoa
 
 class QueryStringParserViewController: ToolViewController, NSTextViewDelegate {
-  @IBOutlet var inputTextView: NSTextView!
+  @IBOutlet var inputTextView: CodeTextView!
   @IBOutlet var outputTextView: JSONTextView!
   var settingViewController: QueryStringParserSettingViewController!
   
   override func viewDidLoad() {
     super.viewDidLoad()
-    inputTextView.setupStandardTextview()
-    outputTextView.setupStandardTextview()
     QueryStringParserViewController.ensureDefaults()
     if pendingInput != nil {
       activate(input: pendingInput!)
@@ -28,7 +26,7 @@ class QueryStringParserViewController: ToolViewController, NSTextViewDelegate {
     if let autoDetectEnabled = NSUserDefaultsController.shared.value(
       forKeyPath: "values.query-string-parser-auto-detect-variables") as? Bool {
       if autoDetectEnabled {
-        return parseQueryString(input).count > 1
+        return input.starts(with: "http") && parseQueryString(input).count > 1
       }
     }
     return false

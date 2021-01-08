@@ -11,7 +11,6 @@ import HotKey
 import ShortcutRecorder
 import ServiceManagement
 import SwiftyBeaver
-import JavaScriptCore
 
 let log = SwiftyBeaver.self
 
@@ -31,6 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   var hotKey: HotKey!
   var myWindowController: WindowController!
   var preferenceWindowController: NSWindowController!
+  var aboutWindowController: NSWindowController!
   let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
   var manualLaunch: Bool = true
   let launcherAppId = "tonyapp.devutils.launcher"
@@ -39,12 +39,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   @IBOutlet weak var toolsSortOrderCustomMenuItem: NSMenuItem!
   
   func testMe() {
-    // Test
+    // openTestWindow()
   }
 
   struct NotificationNames {
     static let AppActivated = Notification.Name("AppActivatedNotification")
     static let AppToolsOrderChanged = Notification.Name("AppToolsOrderChanged")
+  }
+  
+  @IBAction func aboutMenuItemAction(_ sender: Any) {
+    if aboutWindowController == nil {
+      self.aboutWindowController = NSStoryboard(name: "AboutWindow", bundle: nil)
+        .instantiateInitialController() as? NSWindowController
+    }
+    self.myWindowController.window?.addChildWindow((self.aboutWindowController?.window)!, ordered: .above)
+    self.aboutWindowController.showWindow(self)
   }
   
   func disableSparkleUpdate() {
@@ -54,15 +63,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     checkUpdateItem?.isHidden = true
   }
   
-
-  func setUpSandboxed() {
-    log.info("App sandbox: \(AppState.isSandboxed())")
-    
-    if !AppState.isSandboxed() {
-      return;
-    }
-    
+  func setUpCustomAppBundle() {
+    #if NO_SPARKLE
     disableSparkleUpdate()
+    #endif
   }
   
   @IBAction func preferenceMenuAction(_ sender: Any) {
@@ -78,47 +82,111 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   
   func setupLogging() {
     let console = ConsoleDestination()  // log to Xcode Console
-    let file = FileDestination()  // log to default swiftybeaver.log file
 
     console.format = "$Dyyyy-MM-dd HH:mm:ss.SSS$d $C$L$c $N.$F:$l - $M"
-    file.format = "$J" // JSON
 
     // add the destinations to SwiftyBeaver
     log.addDestination(console)
     
     if (AppState.getWriteDebugLog()) {
+      let file = FileDestination()  // log to default swiftybeaver.log file
+      file.format = "$J" // JSON
       log.addDestination(file)
       log.info("Debug log is enabled, log file is at: \(file.logFileURL?.absoluteString ?? "(empty)")")
     }
-    log.info("App version: \(AppState.getAppVersion())")
-  }
-
-  func applicationDidFinishLaunching(_ aNotification: Notification) {
-    // resetAllDefaults()
     
+    log.info("App sandbox: \(AppState.isSandboxed())")
+    
+    log.info("App version: \(AppState.getAppVersion())")
+    
+    #if BUNDLE_APPSTORE
+    log.info("App bundle: AppStore")
+    #elseif BUNDLE_SETAPP
+    log.info("App bundle: Setapp")
+    log.info("Setapp lib version: \(SCLibraryVersion)")
+    #else
+    log.info("App bundle: Default")
+    #endif
+    
+    #if NO_SPARKLE
+    log.info("App update: Managed")
+    #else
+    log.info("App update: Sparkle")
+    #endif
+    
+    #if DEBUG
+    #if BUNDLE_SETAPP
+    log.info("Setapp debug logging enabled")
+    SCEnableDebugLogging(true)
+    #endif
+    #endif
+  }
+  
+  func setupSetapp() {
+    #if BUNDLE_SETAPP
+    SCShowReleaseNotesWindowIfNeeded()
+    #endif
+  }
+  
+  @IBAction func releaseNotesMenuAction(_ sender: Any) {
+    #if BUNDLE_SETAPP
+    SCShowReleaseNotesWindow()
+    #else
+    if let url = URL(string: "https://devutils.app/changelog/") {
+      NSWorkspace.shared.open(url)
+    }
+    #endif
+  }
+  
+  @IBAction func ackButtonAction(_ sender: Any) {
+    if let url = URL(string: "https://devutils.app/acknowledgments/") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+  func applicationDidFinishLaunching(_ aNotification: Notification) {
     // Check if this is a manual launch or a launch by launcher (login item)
     // This check rely on an undocumented behavior of MacOS that a random
     // paramater will be passed if the app is launched by our launcher.
     // Note that our app is sandboxed so we can't use this arguments correctly.
     manualLaunch = ProcessInfo.processInfo.arguments.count == 1
-
+    
+    AppState.ensureAppDefaults()
+    
     setupLogging()
     setupAppWindow()
     setupHotkey()
     setupStatusIcon()
-    setUpSandboxed()
+    setUpCustomAppBundle()
     refreshAppIconsStatus()
     setupObservers()
     killLauncherApp()
     setToolOrderMenuState()
+    setUserPreferredTheme()
+    setupSetapp()
     
     NSApp.servicesProvider = self
     
     ValueTransformer.setValueTransformer(
       UnixTimeToISOString(), forName: .init("UnixTimeToISOString"))
     
-    AppState.ensureDefaultsForAutoDetect()
     testMe()
+  }
+  
+  func setUserPreferredTheme(force: Bool = false) {
+    if #available(OSX 10.14, *) {
+      let theme = AppState.getUserPreferredTheme()
+      if theme == "System" {
+        if force {
+          NSApp.appearance = nil
+        }
+      } else if theme == "Dark" {
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+      } else if theme == "Light" {
+        NSApp.appearance = NSAppearance(named: .vibrantLight)
+      } else {
+        log.error("Incorrect config for theme: \(theme)")
+      }
+    }
   }
   
   @IBAction func newMenuItemAction(_ sender: Any) {
@@ -172,6 +240,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
       alert.addButton(withTitle: "OK")
       alert.runModal()
     }
+  }
+  
+  func openTestWindow() {
+    let testWindowController = NSStoryboard(name: "TestWindow", bundle: nil)
+        .instantiateInitialController() as? NSWindowController
+    self.myWindowController.window?.addChildWindow((testWindowController?.window)!, ordered: .above)
+    testWindowController?.showWindow(self)
   }
   
   func openPreferenceWindow() {
@@ -385,5 +460,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
   
+  @IBAction func factoryResetButtonAction(_ sender: Any) {
+    let sure = GeneralHelpers.confirm(question: "Reset all settings to default?", text: """
+    This action will reset all settings to factory defaults, including:
+      - Hotkey mapping, auto-update, and other preferences...
+      - Custom tool list order
+      - Window and split size/position
+      - Tool specific settings: auto-detect and configs
+
+    You cannot undo this. Are you sure?
+    """)
+    
+    if sure {
+      resetAllDefaults()
+      GeneralHelpers.alert(title: "All done!", text: """
+      Please restart the app for the change to take effect.
+      """)
+    }
+  }
+  
+  @IBAction func sendFeedback(_ sender: Any) {
+    let emailUrl = URL(string: "mailto:feedback@devutils.app?subject=\("Feedback for DevUtils.app version \(AppState.getAppVersion())".encodeUrl() ?? "unknown")")!
+    
+    if NSWorkspace.shared.open(emailUrl) {
+      log.debug("Email client opened")
+    } else {
+      log.debug("Email client cannot be opened")
+    }
+  }
+  
+  @IBAction func followOnTwitter(_ sender: Any) {
+    if let url = URL(string: "https://twitter.com/devutils_app") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+  
+  @IBAction func visitWebsite(_ sender: Any) {
+    if let url = URL(string: "https://devutils.app") {
+      NSWorkspace.shared.open(url)
+    }
+  }
 }
 
